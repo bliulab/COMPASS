@@ -1,0 +1,91 @@
+program: train.py
+method: grid
+name: sams_vae_papalexisatija-select2-0.1-0.1-geneembedding-split-SAMSVAECorrelatedNormalGuide-T
+project: exp008_sams_vae_norman_ood 
+use_wandb: False
+metric:
+  name: val/IWELBO
+  goal: maximize
+
+# Experiment hyperparameters
+seed: 0
+max_steps: 30000
+gradient_clip_norm: 100
+
+# Data module class + hyperparameters
+data_module: PapalexiSatijaOODCombinationDataModule #FrangiehlzarDataEfficiencyDataModule #FrangiehlzarOODCombinationDataModule
+# 1392 
+data_module_kwargs.data_path_1: /home/dataset-local/chengyue/data1/perturbation-new/PapalexiSatija/RNA_split-select2-split.h5ad #RNA_single_co-culture_split-DAR-select3.h5ad #RNA_split_combo
+data_module_kwargs.data_path_2: /home/dataset-local/chengyue/data1/perturbation-new/PapalexiSatija/protein_split-select2-split.h5ad #protein_single_co-culture_split-DAR-select3.h5ad
+data_module_kwargs.use_key_rna: X
+data_module_kwargs.use_key_adt: X 
+data_module_kwargs.filter_gene_by_counts_rna: 1
+data_module_kwargs.filter_gene_by_counts_adt: 0
+data_module_kwargs.filter_cell_by_counts_rna: 1
+data_module_kwargs.filter_cell_by_counts_adt: False
+data_module_kwargs.normalize_total_rna: 1e4
+data_module_kwargs.normalize_total_adt: 1e4
+data_module_kwargs.result_normed_key_rna: X_normed
+data_module_kwargs.result_normed_key_adt: X_normed
+data_module_kwargs.log1p_rna: True
+data_module_kwargs.log1p_adt: True #False
+data_module_kwargs.result_log1p_key_rna: X_log1p
+data_module_kwargs.result_log1p_key_adt: X_log1p
+data_module_kwargs.subset_hvg_rna: 1200
+data_module_kwargs.hvg_flavor_rna: seurat_v3
+data_module_kwargs.subset_hvg_adt: 24
+data_module_kwargs.hvg_flavor_adt: seurat_v3
+data_module_kwargs.frac_combinations_train: 0.5
+data_module_kwargs.frac_combinations_test: 0.25
+#data_module_kwargs.frac_combination_cells_train: 0.25
+data_module_kwargs.split_seed: 1
+data_module_kwargs.batch_size: 64
+data_module_kwargs.highly_variable_genes_only: True
+data_module_kwargs.encode_combos_as_unique: False
+
+# wandb does not provide mechanism to define dependent variables
+# in order to tie the value of multiple variables together,
+# we will preprocess the config to split variables separated by "--"
+# and use the same values for each
+model_kwargs.n_latent--guide_kwargs.n_latent: 32
+model_kwargs.decoder_n_layers: 4 #4 2
+model_kwargs.decoder_n_layers_2: 4 #4 2
+
+# Model class + hyperparameters
+model: SAMSVAEModel
+model_kwargs.mask_prior_prob: 0.1 # [0.005, 0.01, 0.02] 0.01 #每个扰动激活潜变量的先验概率，控制扰动效应的稀疏性 0.1～0.3
+model_kwargs.embedding_prior_scale: 0.1 # 0.3 # [0.5, 1.0, 1.5] 0.1 #0.1 #1 # 0.5 控制扰动效应约束
+model_kwargs.likelihood_key: library_nb
+model_kwargs.likelihood_key_2: library_nb
+model_kwargs.decoder_n_hidden: 64 
+model_kwargs.decoder_n_hidden_2: 64
+  
+# Guide class + hyperparameters
+guide: SAMSVAECorrelatedNormalGuide #SAMSVAEMeanFieldNormalGuide #
+guide_kwargs.basal_encoder_n_hidden: 64 
+guide_kwargs.basal_encoder_input_normalization: log_standardize #log_standardize #但embed和两个omics维度不一致，在sams_vae/models/utils/normalization.py中修改了对应的计算方法
+guide_kwargs.embedding_encoder_n_layers: 2 #
+guide_kwargs.embedding_encoder_n_hidden: 64  #
+guide_kwargs.mean_field_encoder: True #False #
+guide_kwargs.basal_encoder_n_layers: 2 #2
+
+# Loss module class + hyperparameters
+loss_module:  SAMSVAE_ELBOLossModule
+
+# Lightning module hyperparameters
+lightning_module_kwargs.lr: 0.0005
+lightning_module_kwargs.n_particles: 5
+
+# Predictor class + hyperparameters (used to evaluation)
+predictor: SAMSVAEPredictor
+
+# newly add
+model_kwargs.pert_dim: 512   # 对应 gene embedding的维度，不可修改
+model_kwargs.pert_embed_dim: 64
+#model_kwargs.pert_hidden_dim: 128
+#model_kwargs.pert_n_layers: 2
+model_kwargs.transition_hidden_dim: 128
+guide_kwargs.pert_dim: 512
+guide_kwargs.pert_embed_dim: 64
+#guide_kwargs.pert_hidden_dim: 128
+#guide_kwargs.pert_n_layers: 2
