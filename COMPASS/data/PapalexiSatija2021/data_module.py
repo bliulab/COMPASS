@@ -1,3 +1,4 @@
+import os
 from typing import Dict, Literal, Optional, Sequence, Iterable
 
 import anndata
@@ -21,6 +22,12 @@ from COMPASS.data.utils.perturbation_datamodule import (
 from COMPASS.data.utils.perturbation_dataset import SCRNASeqTensorPerturbationDataset, MultiOmicsTensorPerturbationDataset
  
 
+def _expand_path(path: Optional[str]) -> Optional[str]:
+    if path is None:
+        return None
+    return os.path.expanduser(os.path.expandvars(path))
+
+
 class BasePapalexiSatijaDataModule(PerturbationDataModule):
     def __init__(
         self,
@@ -32,6 +39,8 @@ class BasePapalexiSatijaDataModule(PerturbationDataModule):
         # adata_adt: anndata.AnnData = None,
         data_path_1: Optional[str] = None,
         data_path_2: Optional[str] = None,
+        perturbation_embedding_path: Optional[str] = None,
+        metadata_path: Optional[str] = None,
         filter_gene_by_counts_rna: Union[int, bool] = False,
         filter_cell_by_counts_rna: Union[int, bool] = False,
         normalize_total_rna: Union[float, bool] = 1e4,
@@ -96,6 +105,10 @@ class BasePapalexiSatijaDataModule(PerturbationDataModule):
         self.hvg_use_key_adt = hvg_use_key_adt
         self.hvg_flavor_adt = hvg_flavor_adt
         key_to_process_adt = self.use_key_adt
+        data_path_1 = _expand_path(data_path_1)
+        data_path_2 = _expand_path(data_path_2)
+        perturbation_embedding_path = _expand_path(perturbation_embedding_path)
+        metadata_path = _expand_path(metadata_path)
         
         self.adata = sc.read_h5ad(data_path_1)
         self.adata_adt = sc.read_h5ad(data_path_2)
@@ -252,7 +265,11 @@ class BasePapalexiSatijaDataModule(PerturbationDataModule):
 
         pert_freq = D.sum(0, keepdim=True)  # [1, n_treatments]
         pert_freq = pert_freq / (pert_freq.max() + 1e-8)
-        P = torch.load('/home/dataset-local/chengyue/scGPT-main/scMultiomics-perturb/save/dev_PapalexiSatija2021-select2-DAR-replicate-34-split-Apr06-11-12/P_gene.pt')
+        if perturbation_embedding_path is None:
+            raise ValueError(
+                "perturbation_embedding_path must be provided in data_module_kwargs."
+            )
+        P = torch.load(perturbation_embedding_path)
         self.adata_adt.obs = self.adata.obs
 
         train_mask = (self.adata.obs["split"] == "train").to_numpy()
@@ -265,7 +282,9 @@ class BasePapalexiSatijaDataModule(PerturbationDataModule):
         ood_level[(ood_score > q1) & (ood_score <= q2)] = 1   # near / medium OOD
         ood_level[ood_score > q2] = 2                         # far OOD
 
-        meta = pd.read_csv('/home/dataset-local/chengyue/data1/perturbation-new/GSE153056_ECCITE_metadata.tsv', sep = '\t')
+        if metadata_path is None:
+            raise ValueError("metadata_path must be provided in data_module_kwargs.")
+        meta = pd.read_csv(metadata_path, sep = '\t')
         self.adata.obs['batch_label'] = np.array(meta['replicate'].values)
         batch_label = torch.from_numpy(self.adata.obs['batch_label'].str.extract(r'(\d+)').astype(int).to_numpy())
         
@@ -488,6 +507,8 @@ class PapalexiSatijaOODCombinationDataModule(BasePapalexiSatijaDataModule):
         highly_variable_genes_only: bool = False,
         data_path_1: Optional[str] = None,
         data_path_2: Optional[str] = None,
+        perturbation_embedding_path: Optional[str] = None,
+        metadata_path: Optional[str] = None,
         filter_gene_by_counts_rna: Union[int, bool] = False,
         filter_cell_by_counts_rna: Union[int, bool] = False,
         normalize_total_rna: Union[float, bool] = 1e4,
@@ -549,6 +570,8 @@ class PapalexiSatijaOODCombinationDataModule(BasePapalexiSatijaDataModule):
             highly_variable_genes_only=highly_variable_genes_only,
             data_path_1=data_path_1,
             data_path_2=data_path_2,
+            perturbation_embedding_path=perturbation_embedding_path,
+            metadata_path=metadata_path,
             filter_gene_by_counts_rna=filter_gene_by_counts_rna,
             filter_cell_by_counts_rna=filter_cell_by_counts_rna,
             normalize_total_rna=normalize_total_rna,
@@ -656,6 +679,8 @@ class PapalexiSatijaDataEfficiencyDataModule(BasePapalexiSatijaDataModule):
         highly_variable_genes_only: bool = False,
         data_path_1: Optional[str] = None,
         data_path_2: Optional[str] = None,
+        perturbation_embedding_path: Optional[str] = None,
+        metadata_path: Optional[str] = None,
         filter_gene_by_counts_rna: Union[int, bool] = False,
         filter_cell_by_counts_rna: Union[int, bool] = False,
         normalize_total_rna: Union[float, bool] = 1e4,
@@ -688,6 +713,8 @@ class PapalexiSatijaDataEfficiencyDataModule(BasePapalexiSatijaDataModule):
             highly_variable_genes_only=highly_variable_genes_only,
             data_path_1=data_path_1,
             data_path_2=data_path_2,
+            perturbation_embedding_path=perturbation_embedding_path,
+            metadata_path=metadata_path,
             filter_gene_by_counts_rna=filter_gene_by_counts_rna,
             filter_cell_by_counts_rna=filter_cell_by_counts_rna,
             normalize_total_rna=normalize_total_rna,

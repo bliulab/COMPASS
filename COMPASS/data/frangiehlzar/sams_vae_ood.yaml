@@ -14,16 +14,17 @@ gradient_clip_norm: 100
 # Data module class + hyperparameters
 data_module: FrangiehlzarOODCombinationDataModule 
 # 1392 
-data_module_kwargs.data_path_1: /home/dataset-local/chengyue/data1/perturbation-new/Frangiehlzar/RNA_IFN_iid-new.h5ad
-data_module_kwargs.data_path_2: /home/dataset-local/chengyue/data1/perturbation-new/Frangiehlzar/protein_IFN_iid-new.h5ad
+data_module_kwargs.data_path_1: ${COMPASS_DATA_DIR}/RNA_IFN_iid-new.h5ad
+data_module_kwargs.data_path_2: ${COMPASS_DATA_DIR}/protein_IFN_iid-new.h5ad
+data_module_kwargs.perturbation_embedding_path: ${COMPASS_EMBEDDING_DIR}/P_gene.pt
 data_module_kwargs.use_key_rna: X
 data_module_kwargs.use_key_adt: X 
 data_module_kwargs.filter_gene_by_counts_rna: 1
 data_module_kwargs.filter_gene_by_counts_adt: 0
 data_module_kwargs.filter_cell_by_counts_rna: 1
 data_module_kwargs.filter_cell_by_counts_adt: False
-data_module_kwargs.normalize_total_rna: 1e6
-data_module_kwargs.normalize_total_adt: 1e6
+data_module_kwargs.normalize_total_rna: 1000000.0
+data_module_kwargs.normalize_total_adt: 1000000.0
 data_module_kwargs.result_normed_key_rna: X_normed
 data_module_kwargs.result_normed_key_adt: X_normed
 data_module_kwargs.log1p_rna: True

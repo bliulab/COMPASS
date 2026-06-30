@@ -1,3 +1,4 @@
+import os
 from typing import Dict, Literal, Optional, Sequence, Iterable
 
 import anndata
@@ -21,6 +22,12 @@ from COMPASS.data.utils.perturbation_datamodule import (
 from COMPASS.data.utils.perturbation_dataset import SCRNASeqTensorPerturbationDataset, MultiOmicsTensorPerturbationDataset
 
 
+def _expand_path(path: Optional[str]) -> Optional[str]:
+    if path is None:
+        return None
+    return os.path.expanduser(os.path.expandvars(path))
+
+
 class BaseFrangiehlzarDataModule(PerturbationDataModule):
     def __init__(
         self,
@@ -32,6 +39,7 @@ class BaseFrangiehlzarDataModule(PerturbationDataModule):
         # adata_adt: anndata.AnnData = None,
         data_path_1: Optional[str] = None,
         data_path_2: Optional[str] = None,
+        perturbation_embedding_path: Optional[str] = None,
         filter_gene_by_counts_rna: Union[int, bool] = False,
         filter_cell_by_counts_rna: Union[int, bool] = False,
         normalize_total_rna: Union[float, bool] = 1e4,
@@ -96,6 +104,9 @@ class BaseFrangiehlzarDataModule(PerturbationDataModule):
         self.hvg_use_key_adt = hvg_use_key_adt
         self.hvg_flavor_adt = hvg_flavor_adt
         key_to_process_adt = self.use_key_adt
+        data_path_1 = _expand_path(data_path_1)
+        data_path_2 = _expand_path(data_path_2)
+        perturbation_embedding_path = _expand_path(perturbation_embedding_path)
         
         self.adata = sc.read_h5ad(data_path_1)#data_path_1)
         self.adata_adt = sc.read_h5ad(data_path_2) #data_path_2
@@ -262,7 +273,11 @@ class BaseFrangiehlzarDataModule(PerturbationDataModule):
         
         pert_freq = D.sum(0, keepdim=True)  # [1, n_treatments]
         pert_freq = pert_freq / (pert_freq.max() + 1e-8)
-        P = torch.load('/home/dataset-local/chengyue/scGPT-main/scMultiomics-perturb/save/dev_Frangiehlzar2021_IFN_single_pancancer-DAR-4000-mask0.15-split-Mar19-12-45/P_gene.pt')
+        if perturbation_embedding_path is None:
+            raise ValueError(
+                "perturbation_embedding_path must be provided in data_module_kwargs."
+            )
+        P = torch.load(perturbation_embedding_path)
         
 
         self.adata_adt.obs = self.adata.obs
@@ -501,6 +516,7 @@ class FrangiehlzarOODCombinationDataModule(BaseFrangiehlzarDataModule):
         highly_variable_genes_only: bool = False,
         data_path_1: Optional[str] = None,
         data_path_2: Optional[str] = None,
+        perturbation_embedding_path: Optional[str] = None,
         filter_gene_by_counts_rna: Union[int, bool] = False,
         filter_cell_by_counts_rna: Union[int, bool] = False,
         normalize_total_rna: Union[float, bool] = 1e4,
@@ -562,6 +578,7 @@ class FrangiehlzarOODCombinationDataModule(BaseFrangiehlzarDataModule):
             highly_variable_genes_only=highly_variable_genes_only,
             data_path_1=data_path_1,
             data_path_2=data_path_2,
+            perturbation_embedding_path=perturbation_embedding_path,
             filter_gene_by_counts_rna=filter_gene_by_counts_rna,
             filter_cell_by_counts_rna=filter_cell_by_counts_rna,
             normalize_total_rna=normalize_total_rna,
@@ -669,6 +686,7 @@ class FrangiehlzarDataEfficiencyDataModule(BaseFrangiehlzarDataModule):
         highly_variable_genes_only: bool = False,
         data_path_1: Optional[str] = None,
         data_path_2: Optional[str] = None,
+        perturbation_embedding_path: Optional[str] = None,
         filter_gene_by_counts_rna: Union[int, bool] = False,
         filter_cell_by_counts_rna: Union[int, bool] = False,
         normalize_total_rna: Union[float, bool] = 1e4,
@@ -701,6 +719,7 @@ class FrangiehlzarDataEfficiencyDataModule(BaseFrangiehlzarDataModule):
             highly_variable_genes_only=highly_variable_genes_only,
             data_path_1=data_path_1,
             data_path_2=data_path_2,
+            perturbation_embedding_path=perturbation_embedding_path,
             filter_gene_by_counts_rna=filter_gene_by_counts_rna,
             filter_cell_by_counts_rna=filter_cell_by_counts_rna,
             normalize_total_rna=normalize_total_rna,

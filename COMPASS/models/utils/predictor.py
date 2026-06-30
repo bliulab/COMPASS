@@ -401,4 +401,3 @@ class PerturbationPlatedPredictor(nn.Module):
             batch_size=batch_size,
         )
         return adata, adata_adt
-

@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "compass-perturb"
+version = "0.1.0"
+description = "Context-conditioned multi-omics perturbation response prediction."
+readme = "README.md"
+requires-python = ">=3.9,<3.11"
+license = {text = "MIT"}
+authors = [
+  {name = "COMPASS authors"}
+]
+dependencies = [
+  "anndata>=0.10,<0.11",
+  "numpy>=1.26,<2",
+  "pandas>=2.3,<2.4",
+  "pyro-ppl>=1.9,<2",
+  "pytorch-lightning>=2.6,<2.7",
+  "PyYAML>=6,<7",
+  "scanpy>=1.10,<1.11",
+  "scikit-learn>=1.6,<1.7",
+  "scipy>=1.13,<1.14",
+  "torch>=2.8,<2.9",
+  "torchmetrics>=1.8,<1.9",
+  "tqdm>=4.67,<5"
+]
+
+[project.optional-dependencies]
+wandb = ["wandb>=0.16"]
+dev = ["pytest>=7"]
+
+[tool.setuptools.packages.find]
+include = ["COMPASS*"]

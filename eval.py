@@ -1,10 +1,3 @@
-"""
-Script to generate test set evaluation metrics from a training run
-
-Usage:
-python [experiment_path] [--wandb] [--perturbseq] [--batch_size {int}]
-"""
-
 import argparse
 import os
 from os.path import basename, join, splitext
@@ -13,7 +6,6 @@ from typing import Any, Dict, Literal, Optional, List
 import numpy as np
 import pandas as pd
 import torch
-import wandb
 from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 from torch.utils.data import DataLoader
@@ -24,25 +16,10 @@ from COMPASS.models.utils.perturbation_lightning_module import (
     TrainConfigPerturbationLightningModule,
 )
 
-
-def compute_pairwise_corrs(df):
-    corr = df.corr().rename_axis(index='lhs', columns='rhs')
-    return (
-        corr
-        .where(np.triu(np.ones(corr.shape), k=1).astype(bool))
-        .stack()
-        .reset_index()
-        .set_index(['lhs', 'rhs'])
-        .squeeze()
-        .rename()
-    )
-
-def mmd_distance(x, y, gamma):
-    xx = rbf_kernel(x, x, gamma)
-    xy = rbf_kernel(x, y, gamma)
-    yy = rbf_kernel(y, y, gamma)
-
-    return xx.mean() + yy.mean() - 2 * xy.mean()
+try:
+    import wandb
+except ImportError:
+    wandb = None
 
 def cosine_distance_between_vectors(x, y, eps=1e-8):
     """
@@ -62,22 +39,6 @@ def cosine_distance_between_vectors(x, y, eps=1e-8):
     cosine_distance = 1.0 - cosine_similarity
 
     return cosine_distance
-
-def compute_scalar_mmd(target, transport, gammas=None):
-    if gammas is None:
-        gammas = [2, 1, 0.5, 0.1, 0.01, 0.005]
-
-    def safe_mmd(*args):
-        try:
-            mmd = mmd_distance(*args)
-        except ValueError:
-            mmd = np.nan
-        return mmd
-
-    return np.mean(list(map(lambda x: safe_mmd(target, transport, x), gammas)))
-
-def compute_mmd_loss(lhs, rhs, gammas):
-    return np.mean([mmd_distance(lhs, rhs, g) for g in gammas])
 
 # newly add
 def _get_dataset_condition_values(data_module, device):
@@ -141,7 +102,7 @@ def evaluate_checkpoint(
         batch_size=batch_size,
     )
     test_iwelbo_df = predictor.compute_predictive_iwelbo(
-        loaders=test_loader, n_particles=100
+        loaders=test_loader, n_particles=min(100, ate_n_particles)
     )
     test_iwelbo = test_iwelbo_df["IWELBO"].mean()
     metrics["test/IWELBO"] = test_iwelbo
@@ -243,11 +204,8 @@ def get_ate_metrics(data_ate, model_ate, deg, n=20):
             :, -n:
         ]
         # evaluate correlation / R2 across top 20 DE genes per perturbation
-        count_X = np.take_along_axis(data_ate.X.copy(), top_20_idx, axis=-1)
-        count_Y = np.take_along_axis(model_ate.X.copy(), top_20_idx, axis=-1)
         x = np.take_along_axis(data_ate.X.copy(), top_20_idx, axis=-1).flatten()
         y = np.take_along_axis(model_ate.X.copy(), top_20_idx, axis=-1).flatten()
-        
         
         metrics["ATE_pearsonr_top20"] = pearsonr(x, y)[0]
         metrics["ATE_spearman-top20"] = spearmanr(x, y, nan_policy="omit")

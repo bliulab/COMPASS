@@ -1,33 +1,17 @@
-"""
-Training script for SAMS-VAE and baseline models
-
-Single run:
-python train.py --config {config_path}
-See configs/example.yaml for example config
-Results can be logged locally or to Weights and Biases
-
-WandB sweep:
-wandb sweep {sweep_config_path}
-wandb agent {sweep_id}
-See configs/example_sweep.yaml for example config
-Requires wandb account
-"""
 import argparse
 import os
 from collections import defaultdict
 from os.path import exists, join
-from typing import Any, DefaultDict, Dict, Literal
+from typing import Any, DefaultDict, Dict
 
 import pandas as pd
 import pytorch_lightning as pl
 import torch
 torch.serialization.add_safe_globals([defaultdict])
 
-import wandb
 import yaml
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger, WandbLogger
-from torch.utils.data import DataLoader
 
 from COMPASS import data
 from COMPASS.data.utils.perturbation_datamodule import PerturbationDataModule
@@ -38,8 +22,11 @@ from COMPASS.models.utils.lightning_callbacks import (
 from COMPASS.models.utils.perturbation_lightning_module import (
     TrainConfigPerturbationLightningModule, 
 )
-from COMPASS.data.utils.anndata import align_adatas
-from eval import get_ate_metrics, evaluate_checkpoint
+
+try:
+    import wandb
+except ImportError:
+    wandb = None
 
 RESULTS_BASE_DIR = "results/"
 
@@ -80,15 +67,21 @@ def train(config: Dict):
 
     callbacks, best_checkpoint_callback = get_callbacks(results_dir, data_module)
 
-    trainer = pl.Trainer(
-        accelerator=accelerator,
-        logger=logger,
-        callbacks=callbacks,
-        accumulate_grad_batches=4,
-        max_epochs=config.get("max_epochs"),
-        max_steps=config.get("max_steps", -1),
-        gradient_clip_val=config.get("gradient_clip_norm"),
-    )
+    trainer_kwargs = {
+        "accelerator": accelerator,
+        "logger": logger,
+        "callbacks": callbacks,
+        "accumulate_grad_batches": 4,
+        "max_epochs": config.get("max_epochs"),
+        "max_steps": config.get("max_steps", -1),
+        "gradient_clip_val": config.get("gradient_clip_norm"),
+        "fast_dev_run": config.get("fast_dev_run", False),
+    }
+    for optional_key in ("limit_train_batches", "limit_val_batches"):
+        if optional_key in config:
+            trainer_kwargs[optional_key] = config[optional_key]
+
+    trainer = pl.Trainer(**trainer_kwargs)
 
     trainer.fit(
         lightning_module,
@@ -96,37 +89,18 @@ def train(config: Dict):
         val_dataloaders=data_module.val_dataloader(),
     )
 
-    # load the best checkpoint and save validation metrics
+    # Save the best checkpoint path for downstream evaluation with eval.py.
     checkpoint_path = best_checkpoint_callback.best_model_path
-    lightning_module = TrainConfigPerturbationLightningModule.load_from_checkpoint(
-        checkpoint_path, weights_only = False
-    )
-
-    # TODO: clean up
-    if lightning_module.predictor is not None:
-        val_iwelbo = lightning_module.predictor.compute_predictive_iwelbo(
-            data_module.val_dataloader(), n_particles=100
-        )["IWELBO"].mean()
-    else:
-        val_iwelbo = None
 
     if wandb_run is not None:
-        wandb_run.summary["val/IWELBO"] = val_iwelbo
         wandb_run.summary["best_checkpoint_path"] = checkpoint_path
     else:
         summary_df = pd.DataFrame(
-            {"val/IWELBO": [val_iwelbo], "best_checkpoint_path": [checkpoint_path]}
+            {"best_checkpoint_path": [checkpoint_path]}
         )
         summary_df.to_csv(join(results_dir, "summary.csv"), index=False)
 
-    metric, metric_adt = evaluate_checkpoint(lightning_module, data_module, lightning_module.predictor, 'perturbseq', 'adtseq', 512, 2500)#100
-    metric_df = pd.DataFrame([metric])
-    metric_df.to_csv(join(results_dir, "metric_control-cancer.csv"), index=False)#IFNγ
-    
-    metric_adt_df = pd.DataFrame([metric_adt])
-    metric_adt_df.to_csv(join(results_dir, "metric_adt_control-cancer.csv"), index=False)
-
-    return val_iwelbo
+    return checkpoint_path
 
 
 def init_experiment_local(config: Dict):
@@ -144,6 +118,11 @@ def init_experiment_local(config: Dict):
 
 
 def init_experiment_wandb(config: Dict):
+    if wandb is None:
+        raise ImportError(
+            "wandb is required when use_wandb=True or running a wandb sweep. "
+            "Install wandb or set use_wandb: False in the config."
+        )
     kwargs = config.get("wandb_kwargs", dict())
     run = wandb.init(config=config, **kwargs)
     # if part of wandb sweep, run.config has values assigned through sweep
@@ -193,9 +172,21 @@ def preprocess_config(config: Dict):
     if processed_config.get("gradient_clip_norm") == -1:
         processed_config["gradient_clip_norm"] = None
 
+    processed_config = expand_config_paths(processed_config)
+
     print(processed_config)
 
     return processed_config
+
+
+def expand_config_paths(value: Any):
+    if isinstance(value, str):
+        return os.path.expanduser(os.path.expandvars(value))
+    if isinstance(value, dict):
+        return {k: expand_config_paths(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [expand_config_paths(v) for v in value]
+    return value
 
 
 def add_data_info_to_config(config: Dict, data_module: PerturbationDataModule):
